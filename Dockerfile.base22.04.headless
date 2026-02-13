@@ -8,7 +8,7 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 LABEL maintainer="sajib.pramanic@uef.fi"
-LABEL org.opencontainers.image.source=https://github.com/SAJIB3489/docker-worksation.git
+LABEL org.opencontainers.image.source=https://github.com/SAJIB3489/docker-workstation.git
 LABEL org.opencontainers.image.description="The base image ubuntu:22.04"
 LABEL org.opencontainers.image.licenses=MIT
 
