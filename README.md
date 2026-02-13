@@ -1,3 +1,11 @@
+# Docker Container as a Workstation
+
+This repositor contains ready-made ubunutnu versions with bunches of software and packages as a user workstation. Select your desire workspace from below table.
+
+| Description       | Dockerfile                                   | Docker Image                                      |
+| ----------------- | -------------------------------------------- | ------------------------------------------------- |
+| Ubuntu Base 22.04 | [Dockerfile](/Dockerfile.base22.04.headless) | `docker pull ghcr.io/sajib3489/ubuntu-base:22.04` |
+
 docker run \
  --name so101_teleop \
  --network=host \
