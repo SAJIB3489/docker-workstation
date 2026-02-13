@@ -4,7 +4,7 @@ This repositor contains ready-made ubunutnu versions with bunches of software an
 
 | Description       | Dockerfile                                   | Docker Image                                      |
 | ----------------- | -------------------------------------------- | ------------------------------------------------- |
-| Ubuntu Base 22.04 | [Dockerfile](/Dockerfile.base22.04.headless) | `docker pull ghcr.io/sajib3489/ubuntu-base:22.04` |
+| Ubuntu 22.04 base | [Dockerfile](/Dockerfile.base22.04.headless) | `docker pull ghcr.io/sajib3489/ubuntu-base:22.04` |
 
 docker run \
  --name so101_teleop \
