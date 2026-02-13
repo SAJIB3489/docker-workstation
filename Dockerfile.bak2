@@ -1,0 +1,115 @@
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG ROS_DISTRO=humble
+ARG USER=rosuser
+ARG UID=1000
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+LABEL maintainer="sajib.pramanic@uef.fi"
+
+# Install base packages and basic utilities
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg lsb-release build-essential git wget mesa-utils ssh gedit \
+    locales tzdata procps file sudo python3-venv python3-pip python-is-python3 gpg libqt5core5a libqt5dbus5 libqt5gui5 \
+    cmake pkg-config python3-dev libegl1-mesa-dev libgles2-mesa-dev libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+    libwayland-dev libwayland-egl1-mesa libgbm-dev libdrm-dev libusb-1.0-0-dev libudev-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install -U catkin_tools
+
+# Configure locale
+RUN locale-gen en_US.UTF-8 \
+  && update-locale LANG=en_US.UTF-8
+
+# Install Miniforge (multi-arch) into /opt/conda
+# We pick the right Miniforge installer based on dpkg architecture at build time.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      arm64|aarch64) installer=Miniforge3-Linux-aarch64.sh ;; \
+      amd64|x86_64) installer=Miniforge3-Linux-x86_64.sh ;; \
+      *) echo "Unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    base="https://github.com/conda-forge/miniforge/releases/latest/download"; \
+    url="${base}/${installer}"; \
+    curl -fsSL "$url" -o /tmp/miniforge.sh; \
+    bash /tmp/miniforge.sh -b -p /opt/conda; \
+    rm -f /tmp/miniforge.sh; \
+    /opt/conda/bin/conda clean -afy
+
+ENV PATH=/opt/conda/bin:$PATH
+
+# --- LEROBOT + SO101 workspace bootstrap (insert AFTER Miniforge install and PATH export) ---
+ENV LEROBOT_CONDA_ENV=lerobot_ros2
+ENV ROS_WS=/home/${USER}/ros2_ws
+ENV LEROBOT_ROOT=/opt/lerobot
+
+# Create conda env, install runtime libs, clone and pip-install lerobot in editable mode
+RUN /opt/conda/bin/conda create -y -n ${LEROBOT_CONDA_ENV} python=3.10 \
+  && /opt/conda/bin/conda install -y -n ${LEROBOT_CONDA_ENV} -c conda-forge "libstdcxx-ng>=12" "libgcc-ng>=12" \
+  && /opt/conda/bin/conda clean -afy \
+  && git clone https://github.com/nimiCurtis/lerobot.git ${LEROBOT_ROOT} \
+  && chown -R ${UID}:${UID} ${LEROBOT_ROOT} \
+  && /opt/conda/bin/conda run -n ${LEROBOT_CONDA_ENV} python -m pip install -e "${LEROBOT_ROOT}[all]" \
+  && /opt/conda/bin/conda clean -afy
+
+# # create workspace, clone repo, run build.sh and colcon inside the conda env
+# RUN mkdir -p ${ROS_WS}/src \
+#   && git clone --recurse-submodules https://github.com/nimiCurtis/so101_ros2.git ${ROS_WS}/src/so101_ros2 \
+#   && chown -R ${UID}:${UID} ${ROS_WS} \
+#   && /opt/conda/bin/conda run -n ${LEROBOT_CONDA_ENV} --no-capture-output /bin/bash --noprofile --norc -c "cd ${ROS_WS}/src/so101_ros2 && ./build.sh" \
+#   && /opt/conda/bin/conda run -n ${LEROBOT_CONDA_ENV} --no-capture-output /bin/bash --noprofile --norc -c "cd ${ROS_WS} && colcon build --symlink-install" \
+#   && /opt/conda/bin/conda run -n ${LEROBOT_CONDA_ENV} --no-capture-output /bin/bash --noprofile --norc -c '\
+#        DEST="${ROS_WS}/install/so101_ros2_bridge/lib/python3.10/site-packages/lerobot"; \
+#        mkdir -p "$(dirname "$DEST")"; \
+#        if [ -e "$DEST" ]; then rm -rf "$DEST"; fi; \
+#        ln -s ${LEROBOT_ROOT}/src/lerobot "$DEST" || true'
+
+
+# ROS 2 Install 
+RUN apt-get update && apt-get install -y software-properties-common curl && \
+    add-apt-repository universe && \
+    curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# Install ROS packages (choose ros-humble-ros-base to keep image smaller; change to ros-humble-desktop if you need desktop GUI stacks)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+     ros-humble-desktop python3-rosdep python3-rosinstall-generator python3-vcstool doxygen libssh2-1-dev libudev-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+# Initialize rosdep
+RUN rosdep init || true \
+  && rosdep update || true
+
+# create a non-root user and add it to dialout so it can access serial devices
+RUN groupadd -f dialout \
+  && useradd -m -u ${UID} -s /bin/bash ${USER} \
+  && usermod -aG dialout ${USER} \
+  && echo "${USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER} \
+  && chmod 0440 /etc/sudoers.d/${USER}
+
+# Make conda usable for the non-root user (optional: adjust if you prefer not to chown)
+RUN chown -R ${UID}:${UID} /opt/conda
+
+# copy entrypoint and make it executable
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+# keep your existing CMD (e.g., ["bash"]) so users can override CMD
+
+# Make SSH available
+EXPOSE 22
+
+WORKDIR /home/${USER}
+USER ${USER}
+RUN echo 'source /opt/ros/humble/setup.bash' >> /home/${USER}/.bashrc
+
+ENV CONDA_DEFAULT_ENV=ros
+ENV PATH=/opt/conda/envs/ros/bin:$PATH
+
+CMD ["bash"]

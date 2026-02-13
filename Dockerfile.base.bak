@@ -1,0 +1,107 @@
+# Docker image for Raspberry Pi OS 22.04 headless setup, with ROS Humble and conda
+FROM ubuntu:22.04
+
+# Arguments
+ARG user
+ARG uid
+ARG home
+ARG workspace
+ARG shell
+ARG nvidia_driver_version
+ARG container_name
+ARG timezone=Etc/UTC
+
+LABEL maintainer="luigifreda@gmail.com"
+
+ENV TZ=${timezone}
+
+################################
+
+RUN apt-get -y update && apt-get -y dist-upgrade 
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata apt-utils keyboard-configuration
+
+# Basic Utilities 
+RUN apt-get install -y screen tree sudo ssh synaptic aptitude gedit geany
+
+# Latest X11 / mesa GL
+RUN apt-get install -y mesa-utils 
+
+# Dependencies required to build rviz
+RUN apt-get install -y libqt5core5a libqt5dbus5 libqt5gui5 
+
+# Additional development tools
+RUN apt-get install -y build-essential git
+
+# Python 
+RUN apt-get install -y python3-pip
+RUN apt-get install -y python-is-python3 
+RUN pip3 install -U catkin_tools
+
+# ROS deps
+RUN apt-get install -y \
+#python-rosinstall \
+#python-jinja2 \
+doxygen \
+libssh2-1-dev \
+libudev-dev 
+
+# Conda installation
+################################
+RUN mkdir -p ~/miniconda3 && \
+  wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh -O ~/miniconda3/miniconda.sh && \
+  bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3 && \
+  rm ~/miniconda3/miniconda.sh && \
+  ~/miniconda3/bin/conda init bash
+
+################################
+
+# ROS Humble installation
+################################
+RUN apt-get update && apt-get install -y software-properties-common curl && \
+    add-apt-repository universe && \
+    curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# Install ROS 2 packages
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y ros-humble-desktop \
+    && rm -rf /var/lib/apt/lists/*
+
+###################################
+
+# Make SSH available
+EXPOSE 22
+
+# Mount the user's home directory
+VOLUME "${home}"
+
+RUN useradd ${user} -m -s ${shell} -u ${uid} -G sudo,dialout
+
+# Clone user into docker image and set up X11 sharing 
+RUN \
+  echo "${user}:x:${uid}:${uid}:${user},,,:${home}:${shell}" >> /etc/passwd && \
+  echo "${user}:x:${uid}:" >> /etc/group && \
+  echo "${user} ALL=(ALL) NOPASSWD: ALL" > "/etc/sudoers.d/${user}" && \
+  chmod 0440 "/etc/sudoers.d/${user}"
+
+#RUN echo "${user} ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers 
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+RUN echo "${user}:docker" | chpasswd 
+# this allows to switch to user with $ su -
+RUN echo "root:docker" | chpasswd  
+
+# Switch to user
+USER "${user}"
+
+# This is required for sharing Xauthority
+ENV QT_X11_NO_MITSHM=1
+
+
+ENV CONTAINER_NAME="${container_name}"
+
+# Switch to the workspace
+WORKDIR ${workspace}
+
+COPY ./bashrc_add ${home}/bashrc_add
+RUN cat ${home}/bashrc_add >> "${home}/.bashrc"

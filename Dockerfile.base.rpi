@@ -1,0 +1,92 @@
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG ROS_DISTRO=humble
+ARG USER=rosuser
+ARG UID=1000
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+LABEL maintainer="sajib.pramanic@uef.fi"
+
+# Install base packages and basic utilities
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg lsb-release build-essential git wget mesa-utils ssh gedit \
+    locales tzdata procps file sudo python3-venv python3-pip python-is-python3 python3-colcon-common-extensions gpg libqt5core5a libqt5dbus5 libqt5gui5 \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install -U catkin_tools
+
+# Configure locale
+RUN locale-gen en_US.UTF-8 \
+  && update-locale LANG=en_US.UTF-8
+
+# Install Miniforge (multi-arch) into /opt/conda
+# We pick the right Miniforge installer based on dpkg architecture at build time.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      arm64|aarch64) installer=Miniforge3-Linux-aarch64.sh ;; \
+      amd64|x86_64) installer=Miniforge3-Linux-x86_64.sh ;; \
+      *) echo "Unsupported arch: $arch" >&2; exit 1 ;; \
+    esac; \
+    base="https://github.com/conda-forge/miniforge/releases/latest/download"; \
+    url="${base}/${installer}"; \
+    curl -fsSL "$url" -o /tmp/miniforge.sh; \
+    bash /tmp/miniforge.sh -b -p /opt/conda; \
+    rm -f /tmp/miniforge.sh; \
+    /opt/conda/bin/conda clean -afy
+
+ENV PATH=/opt/conda/bin:$PATH
+
+# Create conda env for ROS (Python 3.10) and install build tools
+RUN /opt/conda/bin/conda create -y -n ros python=3.10 \
+  && /opt/conda/bin/conda run -n ros /opt/conda/bin/python -m pip install -U pip setuptools \
+  && /opt/conda/bin/conda run -n ros /opt/conda/bin/pip install colcon-common-extensions empy pyyaml \
+  && /opt/conda/bin/conda clean -afy
+
+# # Add ROS 2 apt repository key (dearmored) and repository (signed-by keyring)
+# RUN set -eux; \
+#     mkdir -p /usr/share/keyrings; \
+#     curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc -o /tmp/ros.key; \
+#     gpg --batch --yes --dearmor /tmp/ros.key > /usr/share/keyrings/ros-archive-keyring.gpg; \
+#     rm -f /tmp/ros.key; \
+#     echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -sc) main" \
+#       > /etc/apt/sources.list.d/ros2.list
+
+RUN apt-get update && apt-get install -y software-properties-common curl && \
+    add-apt-repository universe && \
+    curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | tee /etc/apt/sources.list.d/ros2.list > /dev/null
+
+# Install ROS packages (choose ros-humble-ros-base to keep image smaller; change to ros-humble-desktop if you need desktop GUI stacks)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+     ros-humble-desktop python3-rosdep python3-rosinstall-generator python3-vcstool doxygen libssh2-1-dev libudev-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+# Initialize rosdep
+RUN rosdep init || true \
+  && rosdep update || true
+
+# Create a non-root user and give sudo (if you want passwordless sudo)
+RUN useradd -m -u ${UID} -s /bin/bash ${USER} \
+  && echo "${USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER} \
+  && chmod 0440 /etc/sudoers.d/${USER}
+
+# Make conda usable for the non-root user (optional: adjust if you prefer not to chown)
+RUN chown -R ${UID}:${UID} /opt/conda
+
+# Make SSH available
+EXPOSE 22
+
+WORKDIR /home/${USER}
+USER ${USER}
+RUN echo 'source /opt/ros/humble/setup.bash' >> /home/${USER}/.bashrc
+
+ENV CONDA_DEFAULT_ENV=ros
+ENV PATH=/opt/conda/envs/ros/bin:$PATH
+
+CMD ["bash"]

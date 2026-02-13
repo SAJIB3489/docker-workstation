@@ -1,0 +1,39 @@
+# name=Dockerfile
+FROM ubuntu:22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG USER=user
+ARG UID=1000
+
+ENV LANG=en_US.UTF-8
+ENV LC_ALL=en_US.UTF-8
+
+LABEL maintainer="sajib.pramanic@uef.fi"
+
+# Install base packages and basic utilities (including tzdata/locales non-interactive)
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates curl gnupg lsb-release build-essential git wget mesa-utils ssh gedit \
+    locales tzdata procps file sudo python3-venv python3-pip python-is-python3 gpg \
+    software-properties-common apt-transport-https \
+  && rm -rf /var/lib/apt/lists/*
+
+# Configure locale
+RUN locale-gen en_US.UTF-8 \
+  && update-locale LANG=en_US.UTF-8
+
+# Create a non-root user and give passwordless sudo
+RUN useradd -m -u ${UID} -s /bin/bash ${USER} \
+  && echo "${USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USER} \
+  && chmod 0440 /etc/sudoers.d/${USER}
+
+# && chown ${UID}:${UID} /home/${USER}/.bashrc
+
+RUN chown -R ${UID}:${UID} /home/${USER}
+# Make SSH available
+EXPOSE 22
+
+WORKDIR /home/${USER}
+USER ${USER}
+
+CMD ["bash"]
