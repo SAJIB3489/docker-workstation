@@ -65,7 +65,7 @@ RUN apt-get update \
 RUN rosdep init || true \
   && rosdep update || true
 
-RUN pip3 install -U catkin-tools \
+RUN pip3 install -U catkin_pkg \
     && pip3 install -U typeguard
     
 ##############SO-101 Workspace Setup##############

@@ -2,11 +2,11 @@
 
 This repositor contains ready-made ubunutnu versions with bunches of software and packages as a user workstation. Select your desire workspace from below table.
 
-| Description                                                               | Dockerfile                                   | Docker Image                                        |
-| ------------------------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------- |
-| Ubuntu 22.04 base                                                         | [Dockerfile](/Dockerfile.base22.04.headless) | `docker pull ghcr.io/sajib3489/ubuntu-base:22.04`   |
-| Ubuntu 22.04 , ROS2 humble, Miniconda                                     | [Dockerfile](/Dockerfile.22-04-humble-conda) | `docker pull ghcr.io/sajib3489/ubuntu:humble-conda` |
-| Ubuntu 22.04 , ROS2 humble, Miniconda, LeRobot in conda, SO-101 workspace | [Dockerfile](/Dockerfile.22-04-humble-conda) | `docker pull ghcr.io/sajib3489/ubuntu-base:22.04`   |
+| Description                                                               | Dockerfile                                         | Docker Image                                        |
+| ------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------- |
+| Ubuntu 22.04 base                                                         | [Dockerfile](/Dockerfile.base22.04.headless)       | `docker pull ghcr.io/sajib3489/ubuntu-base:22.04`   |
+| Ubuntu 22.04 , ROS2 humble, Miniconda                                     | [Dockerfile](/Dockerfile.22-04-humble-conda)       | `docker pull ghcr.io/sajib3489/ubuntu:humble-conda` |
+| Ubuntu 22.04 , ROS2 humble, Miniconda, LeRobot in conda, SO-101 workspace | [Dockerfile](/Dockerfile.22-04-humble-conda-so101) | `docker pull ghcr.io/sajib3489/ubuntu-base:22.04`   |
 
 ## Create a container
 
